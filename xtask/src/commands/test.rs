@@ -277,12 +277,17 @@ pub(crate) fn handle_command(
                     helpers::custom_crates_tests(
                         vec!["burn-core"],
                         handle_test_args(
-                            &["--features", "test-tch,record-item-custom-serde"],
+                            &[
+                                "--features",
+                                // `test-tch` enables burn-tch; keep libtorch download explicit
+                                // in CI to avoid environment-dependent failures.
+                                "test-tch,record-item-custom-serde,burn-tch/download-libtorch",
+                            ],
                             args.release,
                         ),
                         None,
                         None,
-                        "std with features: test-tch,record-item-custom-serde",
+                        "std with features: test-tch,record-item-custom-serde,burn-tch/download-libtorch",
                     )?;
 
                     // burn-nn (pretrained and local tests)

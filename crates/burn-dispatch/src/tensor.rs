@@ -1,3 +1,4 @@
+#[cfg(feature = "autodiff")]
 use alloc::boxed::Box;
 
 use burn_backend::{

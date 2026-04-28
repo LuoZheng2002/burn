@@ -28,6 +28,9 @@ pub async fn os_shutdown_signal() {
     }
 }
 
+// Temporary PR lint unblocking: this helper is currently unused in this crate,
+// but kept for communication runtime debugging setup.
+#[allow(dead_code)]
 pub(crate) fn init_logging() {
     let layer = tracing_subscriber::fmt::layer()
         .with_filter(LevelFilter::INFO)

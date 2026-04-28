@@ -76,20 +76,62 @@ pub fn handle_command(
         ]
         .iter()
         .try_for_each(|c| {
-            base_commands::check::handle_command(
-                CheckCmdArgs {
-                    target: target.clone(),
-                    exclude: exclude.clone(),
-                    only: only.clone(),
-                    command: Some(c.clone()),
-                    ignore_audit: args.ignore_audit,
-                    features: args.features.clone(),
-                    no_default_features: args.no_default_features,
-                    ignore_typos: args.ignore_typos,
-                },
-                env.clone(),
-                context.clone(),
-            )
+            let mut check_args = CheckCmdArgs {
+                target: target.clone(),
+                exclude: exclude.clone(),
+                only: only.clone(),
+                command: Some(c.clone()),
+                ignore_audit: args.ignore_audit,
+                features: args.features.clone(),
+                no_default_features: args.no_default_features,
+                ignore_typos: args.ignore_typos,
+            };
+
+            if *c == CheckSubCommand::Lint {
+                // Keep validate's lint path aligned with the temporary check patch
+                // in main.rs until Check is fully moved into commands::check.
+                let should_lint_burn_tch =
+                    !check_args.exclude.iter().any(|krate| krate == "burn-tch")
+                        && (check_args.only.is_empty()
+                            || check_args.only.iter().any(|krate| krate == "burn-tch"))
+                        && (check_args.target == Target::Workspace
+                            || check_args.target == Target::Crates);
+
+                if check_args.target == Target::Workspace {
+                    check_args.target = Target::Crates;
+                }
+
+                if !check_args.exclude.iter().any(|krate| krate == "burn-tch") {
+                    check_args.exclude.push("burn-tch".to_string());
+                }
+
+                if should_lint_burn_tch {
+                    let lint_args = vec![
+                        "clippy".to_string(),
+                        "--no-deps".to_string(),
+                        "--color=always".to_string(),
+                        "-p".to_string(),
+                        "burn-tch".to_string(),
+                        "--features".to_string(),
+                        "download-libtorch".to_string(),
+                        "--".to_string(),
+                        "--deny".to_string(),
+                        "warnings".to_string(),
+                    ];
+
+                    let lint_args_ref: Vec<&str> = lint_args.iter().map(String::as_str).collect();
+
+                    run_process(
+                        "cargo",
+                        &lint_args_ref,
+                        None,
+                        None,
+                        "burn-tch lint should pass with download-libtorch",
+                    )?;
+                }
+            }
+
+            base_commands::check::handle_command(check_args, env.clone(), context.clone())
         })?;
 
         // build

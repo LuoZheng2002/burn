@@ -59,6 +59,112 @@ fn main() -> anyhow::Result<()> {
         Command::Build(cmd_args) => {
             commands::build::handle_command(cmd_args, environment, args.context)
         }
+        Command::Check(mut cmd_args) => {
+            // Temporary compatibility patch for burn-tch after making
+            // `download-libtorch` explicit.
+            //
+            // A cleaner long-term design is to remove `Check` from
+            // `macros::base_commands` and implement `commands::check::handle_command`
+            // (like Build/Test/Doc). That is a larger behavior-moving refactor in
+            // xtask dispatch, so we keep this narrow patch for now and defer the
+            // full restructuring to core contributors.
+            if matches!(cmd_args.command, Some(CheckSubCommand::Lint)) {
+                let has_excluded_burn_tch = cmd_args.exclude.iter().any(|krate| krate == "burn-tch");
+                let has_only_burn_tch = cmd_args.only.iter().any(|krate| krate == "burn-tch");
+
+                let has_excluded_multinode_tests =
+                    cmd_args.exclude.iter().any(|krate| krate == "multinode-tests");
+                let has_excluded_burn_collective_multinode_tests = cmd_args
+                    .exclude
+                    .iter()
+                    .any(|krate| krate == "burn-collective-multinode-tests");
+                let has_only_multinode_tests =
+                    cmd_args.only.iter().any(|krate| krate == "multinode-tests");
+                let has_only_burn_collective_multinode_tests = cmd_args
+                    .only
+                    .iter()
+                    .any(|krate| krate == "burn-collective-multinode-tests");
+
+                let should_lint_burn_tch =
+                    !has_excluded_burn_tch
+                        && (cmd_args.only.is_empty() || has_only_burn_tch)
+                        && (cmd_args.target == Target::Workspace
+                            || cmd_args.target == Target::Crates);
+
+                // Same workaround pattern for `multinode-tests`: base lint resolves
+                // workspace members by path stem, but cargo expects package name.
+                let should_lint_multinode_tests =
+                    !has_excluded_multinode_tests
+                        && !has_excluded_burn_collective_multinode_tests
+                        && (cmd_args.only.is_empty()
+                            || has_only_multinode_tests
+                            || has_only_burn_collective_multinode_tests)
+                        && (cmd_args.target == Target::Workspace
+                            || cmd_args.target == Target::Crates);
+
+                if cmd_args.target == Target::Workspace {
+                    cmd_args.target = Target::Crates;
+                }
+
+                if !has_excluded_burn_tch {
+                    cmd_args.exclude.push("burn-tch".to_string());
+                }
+
+                if !has_excluded_multinode_tests {
+                    cmd_args.exclude.push("multinode-tests".to_string());
+                }
+
+                if should_lint_burn_tch {
+                    let lint_args = [
+                        "clippy",
+                        "--no-deps",
+                        "--color=always",
+                        "-p",
+                        "burn-tch",
+                        "--features",
+                        "download-libtorch",
+                        "--",
+                        "--deny",
+                        "warnings",
+                    ];
+
+                    run_process(
+                        "cargo",
+                        &lint_args,
+                        None,
+                        None,
+                        "burn-tch lint should pass with download-libtorch",
+                    )?;
+                }
+
+                if should_lint_multinode_tests {
+                    let lint_args = [
+                        "clippy",
+                        "--no-deps",
+                        "--color=always",
+                        "-p",
+                        "burn-collective-multinode-tests",
+                        "--",
+                        "--deny",
+                        "warnings",
+                    ];
+
+                    run_process(
+                        "cargo",
+                        &lint_args,
+                        None,
+                        None,
+                        "multinode-tests lint should pass with package name",
+                    )?;
+                }
+
+                base_commands::check::handle_command(cmd_args, environment.clone(), args.context)?;
+
+                Ok(())
+            } else {
+                base_commands::check::handle_command(cmd_args, environment, args.context)
+            }
+        }
         Command::Doc(cmd_args) => {
             commands::doc::handle_command(cmd_args, environment, args.context)
         }
